@@ -1829,58 +1829,90 @@ GetCurvedSplatBoundary2D = function(splat.idx, splat.collection.2D, data, additi
 
 
 
-SelectSplatForward = function(splat.collection.init, eval.mat.full, data, curve.fitting = FALSE, BIC = FALSE, verbose = FALSE){
-  AIC.old = AIC.new.tmp = AIC.new = 0
-  n.var.init = n.var = length(splat.collection.init)
-  design.matrix.old = design.matrix.new.tmp = design.matrix.new =  eval.mat.full[,1:n.var]
-  lmfit = lm(data[,3] ~ design.matrix.old + 0)
-  if(BIC){
-    AIC.old = BIC(lmfit)
-  }else{
-    AIC.old = AIC(lmfit)  
+SelectSplatForward = function(basis.cand.idx, basis.init.cidx = NULL, eval.mat.obs, basis.max.num, data, prop.var = 0.8, BIC = FALSE, verbose = FALSE, scaling = FALSE, centering = TRUE, parallelization = FALSE){
+  
+  AIC.old = AIC.new = 0
+  
+  if(is.null(basis.init.cidx)){
+    
+    resid.tmp = numeric(length(basis.cand.idx))
+    
+    for(basis.cidx in 1:length(basis.cand.idx)){
+      resid.tmp.tmp = diag(x=1, nrow=dim(eval.mat.obs)[1]) - 1/sum(eval.mat.obs[,basis.cand.idx[basis.cidx]]^2) * eval.mat.obs[,basis.cand.idx[basis.cidx]] %*% t(eval.mat.obs[,basis.cand.idx[basis.cidx]])
+      resid.tmp.tmp = resid.tmp.tmp %*% data[,3]
+      resid.tmp[basis.cidx] = sum(resid.tmp.tmp^2)
+    }
+    
+    basis.init.cidx = which.min(resid.tmp)
+    
   }
   
-  idx.added = vector()
+  basis.selected.idx.old = basis.selected.idx.new = basis.cand.idx[basis.init.cidx]
   
-  while(n.var<dim(data)[1]){
+  design.matrix.tmp = eval.mat.obs[, basis.selected.idx.old]
+  
+  # pcr.tmp = pcr.jh(response = data[,3], predictor = as.matrix(design.matrix.tmp, ncol=1), prop.var = prop.var, scaling = scaling, BIC = BIC, centering = centering)
+  # AIC.old = pcr.tmp$info.crit
+  lmfit.tmp = lm(data[,3]~design.matrix.tmp)
+  AIC.old = AIC(lmfit.tmp)
+  
+  n.var = length(basis.selected.idx.old)
+  
+  while(n.var <= basis.max.num){
     if(verbose){
-      cat("n.var:", n.var, "/ AIC:", AIC.old,"\n")  
+      cat("n.var:", n.var, "/ AIC:", AIC.old,"\n")
     }
     
-    var.idx.cand = setdiff((n.var.init+1):dim(eval.mat.full)[2], idx.added)
+    remained.cidx  = which(!is.element(basis.cand.idx, basis.selected.idx.old))
     
-    AIC.vec = foreach(var.idx = var.idx.cand, .combine='c') %dopar% {
-      design.matrix.new.tmp = cbind(design.matrix.old, eval.mat.full[,var.idx])
-      lmfit.new.tmp = lm(data[,3] ~ design.matrix.new.tmp + 0)
-      if(BIC){
-        BIC(lmfit.new.tmp)
-      }else{
-        AIC(lmfit.new.tmp) 
+    if(parallelization){
+      AIC.vec = foreach(basis.cidx = remained.cidx, .combine = 'c') %dopar% {
+        basis.selected.idx.tmp = c(basis.selected.idx.old, basis.cand.idx[basis.cidx])
+        
+        design.matrix.tmp = eval.mat.obs[, basis.selected.idx.tmp]
+        lmfit = lm(data[,3]~design.matrix.tmp)
+        AIC(lmfit)
       }
-    
+    }else{
+      
+      AIC.vec = vector()
+      
+      for( basis.cidx in remained.cidx ){
+        
+        basis.selected.idx.tmp = c(basis.selected.idx.old, basis.cand.idx[basis.cidx])
+        
+        design.matrix.tmp = eval.mat.obs[, basis.selected.idx.tmp]
+        
+        # pcr.tmp = pcr.jh(response = data[,3], predictor = design.matrix.tmp, prop.var = prop.var, scaling = scaling, BIC = BIC)
+        # AIC.vec[length(AIC.vec)+1] = pcr.tmp$info.crit
+        
+        lmfit = lm(data[,3]~design.matrix.tmp)
+        AIC.vec[length(AIC.vec) + 1] = AIC(lmfit)
+      }  
     }
+    
     
     AIC.new = min(AIC.vec)
-    idx.tmp = var.idx.cand[which.min(AIC.vec)]
-    design.matrix.new = cbind(design.matrix.old, eval.mat.full[,idx.tmp])
+    
+    remained.cidx.min = remained.cidx[which.min(AIC.vec)]
+    basis.selected.idx.new = c(basis.selected.idx.old, basis.cand.idx[remained.cidx.min])
     
     if(AIC.new > AIC.old){
       if(verbose){
-        cat("no more variable will be added.\n")  
+        cat("no more variable will be added.\n\n")
       }
       break
     }else{
       AIC.old = AIC.new
-      design.matrix.old = design.matrix.new
-      idx.added = c(idx.added, idx.tmp)
+      basis.selected.idx.old = basis.selected.idx.new
     }
     
-    n.var = dim(design.matrix.old)[2]
+    n.var = length(basis.selected.idx.old)
   }
   
-  selected.splat.idx = c(1:n.var.init, idx.added)
-  return(selected.splat.idx)
+  return(basis.selected.idx.old)
 }
+
 
 EstimateSeq = function(splat.collection.2D, selected.splat.idx, level.partition, eval.mat.obs=NULL, eval.mat.pred=NULL, prop.var = 0.99, curve.fitting=FALSE, data){
   
@@ -1951,9 +1983,63 @@ EstimateSeq = function(splat.collection.2D, selected.splat.idx, level.partition,
   return(list(pcr.pred.list = pcr.pred.list, beta.list = beta.list))
 }
 
+pcr.jh = function(response, predictor, prop.var = 0.8, scaling = FALSE, BIC = FALSE, centering = FALSE){
+  
+  if(scaling){
+    svd.tmp = svd(cor(predictor))
+  }else{
+    svd.tmp = svd(cov(predictor))
+  }
+  
+  if(centering){
+    pc.num = which(cumsum(svd.tmp$d)/sum(svd.tmp$d) > prop.var)[1]
+    eg.vector = svd.tmp$v[,1:pc.num]
+    
+    predictor.centered = CenteringData(predictor, augmentation = FALSE)
+    
+    design.mat.pc = predictor.centered %*% eg.vector
+    design.mat.pc.y = data.frame(response = response, basis = design.mat.pc)
+    x = model.matrix(response~., data=design.mat.pc.y)[,-1]
+    y = design.mat.pc.y$response
+    
+    lmfit = lm(y~x)
+    beta = c(lmfit$coefficients[1], eg.vector %*% lmfit$coefficients[-1])
+    est = lmfit$fitted.values
+    
+  }else{
+    pc.num = which(cumsum(svd.tmp$d)/sum(svd.tmp$d) > prop.var)[1]
+    eg.vector = svd.tmp$v[,1:pc.num]
+    design.mat.pc = apply(predictor, 2, mean) %*% eg.vector
+    design.mat.pc.y = data.frame(response = response, basis = design.mat.pc)
+    x = model.matrix(response~., data=design.mat.pc.y)[,-1]
+    y = design.mat.pc.y$response
+    
+    lmfit = lm(y~x+0)
+    beta = eg.vector %*% lmfit$coefficients
+    est = lmfit$fitted.values
+  }
+  
+  # AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + 2 * pc.num # 이러면 더하나 마나 한 것도 basis로 넣게될 듯?
+  
+  if(!BIC){
+    AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + 2 * length(lmfit$coefficients)
+  }else{
+    AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + log(length(lmfit$fitted.values)) * length(lmfit$coefficients)
+  }
+  
+  return(list(beta = beta, est = est, info.crit = AIC))
+  
+}
 
 
-
+CenteringData <- function(data, augmentation = FALSE) {
+  data.centered = data - rep(1, nrow(data)) %*% t(apply(data, 2, mean))
+  if(augmentation){
+    return(cbind(1, data.centered))  
+  }else{
+    return(data.centered)
+  }
+}
 
 
 reset_par <- function(){
