@@ -1017,7 +1017,8 @@ EvaluateBasis = function(x, splat.collection.2D, data, curve.fitting = FALSE, mm
     
     svd.tmp = svd(splat.data.cov)
     
-    r.mat[,splat.idx] = r.tmp * max(svd.tmp$d[2] / svd.tmp$d[1], mm)
+    # r.mat[,splat.idx] = r.tmp * max(svd.tmp$d[2] / svd.tmp$d[1], mm)
+    r.mat[,splat.idx] = r.tmp * 0.1
   }
   
   
