@@ -1,4 +1,4 @@
-# nbhd = 3 o 4???
+# nbhd 미리 설정 잘하자.
 
 library(fields)
 library(RANN)
