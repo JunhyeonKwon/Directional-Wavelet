@@ -1,6 +1,6 @@
 set.seed(304)
 
-jongmin = read.csv("~/Dropbox/Research/2019_WaveDirec/jongmin/seismological.csv")
+jongmin = read.csv("/Users/junhyeon/Dropbox/Research/GitHub/Directional-Wavelet/seismological.csv")
 
 time.tmp = strsplit(as.character(jongmin$Origin.Time), " ")
 
