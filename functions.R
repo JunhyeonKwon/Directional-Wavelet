@@ -1,10 +1,33 @@
 # nbhd 미리 설정 잘하자.
 
+if(!require(fields)){
+  install.packages("fields")
+}
 library(fields)
+
+if(!require(RANN)){
+  install.packages("RANN")
+}
 library(RANN)
+
+if(!require(igraph)){
+  install.packages("igraph")
+}
 library(igraph)
+
+if(!require(princurve)){
+  install.packages("princurve")
+}
 library(princurve)
+
+if(!require(foreach)){
+  install.packages("foreach")
+}
 library(foreach)
+
+if(!require(doParallel)){
+  install.packages("doParallel")
+}
 library(doParallel)
 registerDoParallel(cores=detectCores()-1)
 
@@ -2004,7 +2027,7 @@ pcr.jh = function(response, predictor, prop.var = 0.8, scaling = FALSE, BIC = FA
     y = design.mat.pc.y$response
     
     lmfit = lm(y~x)
-    beta = c(lmfit$coefficients[1], eg.vector %*% lmfit$coefficients[-1])
+    beta = c(lmfit$coefficients[1], as.matrix(eg.vector) %*% lmfit$coefficients[-1])
     est = lmfit$fitted.values
     
   }else{
