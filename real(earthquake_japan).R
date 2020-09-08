@@ -1,8 +1,8 @@
 set.seed(304)
 
-jongmin = read.csv("/Users/junhyeon/Dropbox/Research/GitHub/Directional-Wavelet/seismological.csv")
+earthquake = read.csv("/Users/junhyeon/Dropbox/Research/GitHub/Directional-Wavelet/seismological.csv")
 
-time.tmp = strsplit(as.character(jongmin$Origin.Time), " ")
+time.tmp = strsplit(as.character(earthquake$Origin.Time), " ")
 
 length(time.tmp)
 
@@ -11,12 +11,12 @@ for(i in 1:length(time.tmp)){
   date.tmp[i] = as.Date(time.tmp[[i]][1], format = "%Y.%m.%d")
 }
 
-japan.idx = which(jongmin$Lat >= 20 & jongmin$Lat <= 50 & jongmin$Lon >= 120 & jongmin$Lon <= 150)
+japan.idx = which(earthquake$Lat >= 20 & earthquake$Lat <= 50 & earthquake$Lon >= 120 & earthquake$Lon <= 150)
 
 c21.idx = which(date.tmp > as.Date("1999-01-01"))
-nonzero.idx = which(jongmin$Magn > 0)
+nonzero.idx = which(earthquake$Magn > 0)
 
-japan21 = jongmin[intersect(japan.idx, intersect(c21.idx, nonzero.idx)), ]
+japan21 = earthquake[intersect(japan.idx, intersect(c21.idx, nonzero.idx)), ]
 length(intersect(japan.idx, intersect(c21.idx, nonzero.idx)))
 
 quilt.plot(japan21$Lon, japan21$Lat, japan21$Magn, nx=128, ny=128, zlim=c(0,9.1))
