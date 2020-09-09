@@ -1,3 +1,4 @@
+############# Simulation ###################################
 nbhd.num = 5
 core.num = detectCores()-2
 
@@ -12,10 +13,20 @@ simulation.list.total = list()
 
 simulated.direction = c("line", "sine", "circle", "cross")
 
+cat("** SIMULATION SETTING **\n")
+cat("Direction:", simulated.direction, "\n")
+cat("Iteration:", iter.num, "for each\n")
+cat("Number of nbhd obs for bases construction", nbhd.num, "\n")
+cat("Non-linear basis:", curve.fitting, "\n\n")
+
 for(form in simulated.direction){
-  cat("Simulation for the shape:", form, " has started.\n")
+  cat("Simulation for the shape '", form, "' has started.\n")
   
-  simulation.result = foreach(iter = 1:iter.num, .packages = c("fields", "RANN")) %dopar% {
+  # my.cluster = makeCluster(core.num, outfile = "./debug.txt")
+  my.cluster = makeCluster(core.num)
+  registerDoParallel(my.cluster)
+  
+  simulation.result = foreach(iter = 1:iter.num, .packages = c("fields", "RANN", "princurve")) %dopar% {
     tryCatch({
       # Data Generation
       x.grid = runif(512, min=0, max=1)
@@ -204,23 +215,26 @@ for(form in simulated.direction){
       c(foo, result)},
       error = function(e) {
         return(paste0("Iteration ", iter, " caused the error: ", e))
-      }, warning = function(w) {
-        return(paste0("Iteration ", iter, " caused the warning: ", w))
-      })
+      }
+      # , warning = function(w) {
+      #   return(paste0("Iteration ", iter, " caused the warning: ", w))
+      # }
+      )
     
   }
-  
+  stopCluster(my.cluster)
   
   simulation.list.total[[which(simulated.direction == form)]] = simulation.result
   
   time_tmp = Sys.time()  
-  cat("Simulation for the shape:", form, " has ended.\n")
+  cat("Simulation for the shape: '", form, "' has ended.\n")
   cat("(elapsed time: ", time_tmp - time_start, units(time_tmp - time_start), ")\n\n")
 }
 
 time_end = Sys.time()
-cat("Simulation for the every shape:", form, " has ended.\n")
+cat("Simulation for the every shape has ended.\n")
 cat("(total elapsed time: ", time_end - time_start, units(time_end - time_start), ")\n\n")
+############################################################  
 
 
 
@@ -234,18 +248,6 @@ grid.tmp = seq(0,1,length.out = 100)
 result.true = GenerateTestImage(x.coord=rep(grid.tmp,each=100), y.coord=rep(grid.tmp,100), snr=Inf, form=form, z.flux = FALSE)
 
 
-############# Simulation ###################################
-# my.cluster = makeCluster(core.num, outfile = "./debug.txt")
-my.cluster = makeCluster(core.num)
-registerDoParallel(my.cluster)
-
-time_start = Sys.time()
-
-
-time_end = Sys.time()
-cat("Elapsed time: ", time_end - time_start,  units(time_end - time_start), "\n")
-stopCluster(my.cluster)
-############################################################  
 
 
 
