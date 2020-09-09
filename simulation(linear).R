@@ -203,7 +203,7 @@ stopCluster(my.cluster)
 ### Comparison of proposed method with TPS (Mean squared error) ####
 pvec = vector()
 tvec = vector()
-for(i in 1:14){
+for(i in 1:iter.num){
   pvec[i] = simulation.list[[i]]$pcr.mse
   tvec[i] = simulation.list[[i]]$tps.mse
 }
