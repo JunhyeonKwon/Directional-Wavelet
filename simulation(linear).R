@@ -6,6 +6,8 @@ set.seed(304)
 
 form = "line"
 
+curve.fitting = TRUE
+
 
 cat("Shape:", form, "\n")
 
@@ -51,8 +53,8 @@ simulation.list = foreach(iter = 1:iter.num, .packages = c("fields", "RANN")) %d
     }
     
     # Basis Evaluation
-    splat.collection.total.2D = MakeSplatCollection2D(splat.collection = splat.collection.total, data = sim.image, curve.fitting = FALSE)
-    eval.mat.obs = EvaluateBasis(x = sim.image[,1:2], splat.collection.2D = splat.collection.total.2D, data = sim.image, curve.fitting = FALSE, mm = 1)
+    splat.collection.total.2D = MakeSplatCollection2D(splat.collection = splat.collection.total, data = sim.image, curve.fitting = curve.fitting)
+    eval.mat.obs = EvaluateBasis(x = sim.image[,1:2], splat.collection.2D = splat.collection.total.2D, data = sim.image, curve.fitting = curve.fitting, mm = 1)
     
     
     # TPS
@@ -120,19 +122,33 @@ simulation.list = foreach(iter = 1:iter.num, .packages = c("fields", "RANN")) %d
       
       obs.crspd.basis.selected.idx = vector()
       
-      for(splat.idx in splat.selected[[level.now]]){
-        # level.now의 각 basis에 대응되는 obs 중 principal curve의 중심과 거리가 가장 가까운 obs를 찾아냄
-        idx.tmp = foo$splat.collection.total[[ splat.idx ]]$idx
-        
-        trans.tmp = TranslateData(target.now[idx.tmp, 1:2], center = -foo$splat.collection.total.2D[[splat.idx]]$center)
-        # dev.tmp = sqrt(sum(trans.tmp^2))
-        dev.tmp = apply(trans.tmp, 1, function(x) sum(x^2))
-        
-        obs.crspd.basis.selected.idx[length(obs.crspd.basis.selected.idx)+1] = idx.tmp[which.min(dev.tmp)]
+      if(curve.fitting){
+        # for basis with non-linear direction
+        for(splat.idx in splat.selected[[level.now]]){
+          # level.now의 각 basis에 대응되는 obs 중 principal curve의 중심과 거리가 가장 가까운 obs를 찾아냄
+          idx.tmp = foo$splat.collection.total[[ splat.idx ]]$idx
+          
+          trans.tmp = GetDeviationFromCurve(target.now[idx.tmp, 1:2], foo$splat.collection.total.2D[[ splat.idx ]]$polygon)
+          dev.tmp = sqrt(trans.tmp$lambda^2 + trans.tmp$dev^2)
+          
+          obs.crspd.basis.selected.idx[length(obs.crspd.basis.selected.idx)+1] = idx.tmp[which.min(dev.tmp)]
+        }
+      }else{
+        # for basis with linear direction
+        for(splat.idx in splat.selected[[level.now]]){
+          # level.now의 각 basis에 대응되는 obs 중 principal curve의 중심과 거리가 가장 가까운 obs를 찾아냄
+          idx.tmp = foo$splat.collection.total[[ splat.idx ]]$idx
+          
+          trans.tmp = TranslateData(target.now[idx.tmp, 1:2], center = -foo$splat.collection.total.2D[[splat.idx]]$center)
+          # dev.tmp = sqrt(sum(trans.tmp^2))
+          dev.tmp = apply(trans.tmp, 1, function(x) sum(x^2))
+          
+          obs.crspd.basis.selected.idx[length(obs.crspd.basis.selected.idx)+1] = idx.tmp[which.min(dev.tmp)]
+        }
       }
       
-      obs.idx.tmp = unique(obs.crspd.basis.selected.idx)
       
+      obs.idx.tmp = unique(obs.crspd.basis.selected.idx)
       
       design.matrix.tmp = eval.mat.obs[ obs.idx.tmp, splat.selected[[level.now]] ]
       
@@ -153,10 +169,10 @@ simulation.list = foreach(iter = 1:iter.num, .packages = c("fields", "RANN")) %d
     
     
     ##########################
-    eval.mat.grid = EvaluateBasis(x = cbind(rep(grid.tmp,each=100), rep(grid.tmp,100)), splat.collection.2D = foo$splat.collection.total.2D[unlist(rev(splat.selected))], data = foo$data, curve.fitting = FALSE, mm = 1)
+    eval.mat.grid = EvaluateBasis(x = cbind(rep(grid.tmp,each=100), rep(grid.tmp,100)), splat.collection.2D = foo$splat.collection.total.2D[unlist(rev(splat.selected))], data = foo$data, curve.fitting = curve.fitting, mm = 1)
     
     
-    #eval.mat.reduced.pred = EvaluateBasis(x = cbind(rep(grid.tmp,each=100), rep(grid.tmp,100)), splat.collection.2D = foo$splat.collection.total.2D[foo$selected.splat], data = foo$data, curve.fitting = TRUE)
+    #eval.mat.reduced.pred = EvaluateBasis(x = cbind(rep(grid.tmp,each=100), rep(grid.tmp,100)), splat.collection.2D = foo$splat.collection.total.2D[foo$selected.splat], data = foo$data, curve.fitting = curve.fitting)
     
     
     # on grid
