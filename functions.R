@@ -36,6 +36,7 @@ nbhd.num = 5
 splat.unit = list(idx=NULL, center=NULL, normal.vector=NULL, major.axis=NULL, minor.axis=NULL, splat.left=NULL, splat.right=NULL, idx2=NULL, cov.2d=NULL, area.2d=NULL, ev.ratio.2d = NULL, activated=TRUE)
 # cov가 3차원, 2차원 혼용되고 있지 않은지 체크할 필요 있음
 
+
 GenerateTestShape = function(x, form="sine"){
   if(form=="line"){
     return(0.6*x + 0.2)
@@ -52,7 +53,6 @@ GenerateTestShape = function(x, form="sine"){
   }
 }
 
-
 GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z.flux = FALSE){
   x.len = length(x.coord)
   y.len = length(y.coord)
@@ -65,8 +65,13 @@ GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z
   if(form == "inv"){
     return.vec.nf = exp(-(abs(y.coord-0.5) + 0.5 - GenerateTestShape(x.coord, form))^2 / (2*sigma^2))
   }else if(form == "circle"){
-    return.vec.nf = exp(-abs((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16) / (16*sigma^2))
-  }else{
+    return.vec.nf = exp(-abs((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16) / (30*sigma^2))
+  }else if(form == "cross"){
+    vec.nf.tmp1 = exp(-(x.coord - 0.5)^2 / (sigma^2))
+    vec.nf.tmp2 = exp(-(y.coord - 0.5)^2 / (sigma^2))
+    return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
+  }
+  else{
     return.vec.nf = exp(-(y.coord - GenerateTestShape(x.coord, form))^2 / (2*sigma^2))
   }
   
@@ -85,7 +90,6 @@ GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z
   
   return(return.vec)
 }
-
 # https://math.stackexchange.com/questions/1956699/getting-a-transformation-matrix-from-a-normal-vector
 
 RotateNorm = function(data, normal.vector, inverse=TRUE){
