@@ -1,5 +1,7 @@
 ############# Simulation ###################################
 nbhd.num = 5
+grid.tmp = seq(0,1,length.out = 100)
+
 core.num = detectCores()-2
 
 set.seed(304)
@@ -13,14 +15,23 @@ simulation.list.total = list()
 
 simulated.direction = c("line", "sine", "circle", "cross")
 
-cat("** SIMULATION SETTING **\n")
-cat("Direction:", simulated.direction, "\n")
-cat("Iteration:", iter.num, "for each\n")
-cat("Number of nbhd obs for bases construction", nbhd.num, "\n")
-cat("Non-linear basis:", curve.fitting, "\n\n")
+
 
 for(form in simulated.direction){
+  if(which(simulated.direction == form) == 1){
+    cat("** SIMULATION SETTING **\n")
+    cat("Direction:", simulated.direction, "\n")
+    cat("Iteration:", iter.num, "times for each direction\n")
+    cat("CPU threads:", core.num, "\n")
+    cat("Number of nbhd obs for bases construction:", nbhd.num, "\n")
+    cat("Non-linear basis:", curve.fitting, "\n\n")    
+  }
+  
   cat("Simulation for the shape '", form, "' has started.\n")
+  time_tmp1 = Sys.time()
+  
+  # True Data
+  result.true = GenerateTestImage(x.coord=rep(grid.tmp,each=100), y.coord=rep(grid.tmp,100), snr=Inf, form=form, z.flux = FALSE)
   
   # my.cluster = makeCluster(core.num, outfile = "./debug.txt")
   my.cluster = makeCluster(core.num)
@@ -226,47 +237,51 @@ for(form in simulated.direction){
   
   simulation.list.total[[which(simulated.direction == form)]] = simulation.result
   
-  time_tmp = Sys.time()  
+  time_tmp2 = Sys.time()
   cat("Simulation for the shape: '", form, "' has ended.\n")
-  cat("(elapsed time: ", time_tmp - time_start, units(time_tmp - time_start), ")\n\n")
+  cat("(elapsed time: ", time_tmp2 - time_tmp1, units(time_tmp2 - time_tmp1), ")\n\n")
+  
+  if(which(simulated.direction == form) == length(simulated.direction)){
+    time_end = Sys.time()
+    cat("Simulation for the every shape has ended.\n")
+    cat("(total elapsed time: ", time_end - time_start, units(time_end - time_start), ")\n\n")    
+  }
 }
 
-time_end = Sys.time()
-cat("Simulation for the every shape has ended.\n")
-cat("(total elapsed time: ", time_end - time_start, units(time_end - time_start), ")\n\n")
 ############################################################  
 
 
 
 
 
+########### Results #####################################
+form = "cross"
+result.tmp = simulation.list.total[[which(simulated.direction == form)]]
 
-
-
-############# True Data ####################################
-grid.tmp = seq(0,1,length.out = 100)
+# True Data
 result.true = GenerateTestImage(x.coord=rep(grid.tmp,each=100), y.coord=rep(grid.tmp,100), snr=Inf, form=form, z.flux = FALSE)
-
-
-
-
 
 ### Comparison of proposed method with TPS (Mean squared error) ####
 pvec = vector()
 tvec = vector()
 for(i in 1:iter.num){
-  pvec[i] = simulation.list[[i]]$pcr.mse
-  tvec[i] = simulation.list[[i]]$tps.mse
+  if(is.character(result.tmp[[i]])){
+    pvec[i] = NA
+    tvec[i] = NA
+  }else{
+    pvec[i] = result.tmp[[i]]$pcr.mse
+    tvec[i] = result.tmp[[i]]$tps.mse  
+  }
 }
 
-mean(pvec) # line: 0.01492715 (no iteration), sine: 0.02300716 (no iteration)
-mean(tvec) # line: 0.0173149 (no iteration), sine: 0.01403779 (no iteration)
-
-
+mean(pvec, na.rm = TRUE) # line: 0.01492715 (no iteration), sine: 0.02300716 (no iteration)
+mean(tvec, na.rm = TRUE) # line: 0.0173149 (no iteration), sine: 0.01403779 (no iteration)
 
 
 
 ### Plotting ##################################################
+sim.idx = 1
+foo = result.tmp[[sim.idx]]
 
 # TRUE
 quilt.plot(x=rep(grid.tmp,each=100), y = rep(grid.tmp,100), z = result.true, nx=100, ny=100, zlim=c(-0.2,1.2), main=form)  
@@ -277,14 +292,14 @@ quilt.plot(foo$data[,1],foo$data[,2],foo$data[,3], nx=100, ny=100, zlim=c(-0.2,1
 # predicted value
 par(mfrow=c(2,2))
 for(j in 4:1){
-  quilt.plot(x=rep(grid.tmp,each=100), y = rep(grid.tmp,100), z = pred.grid.list[[j]], nx=100, ny=100, zlim=c(-0.2,1.2), main=paste0("predicted value of ", form, ", Level ", j))   
+  quilt.plot(x=rep(grid.tmp,each=100), y = rep(grid.tmp,100), z = foo$pred.grid[[j]], nx=100, ny=100, zlim=c(-0.2,1.2), main=paste0("predicted value of ", form, ", Level ", j))   
 }
 par(mfrow=c(1,1))
 
 # abs(error) of the proposed method on the grid
 par(mfrow=c(2,2))
 for(j in 4:1){
-  quilt.plot(x=rep(grid.tmp,each=100), y = rep(grid.tmp,100), z = abs(pred.grid.list[[j]] - result.true), nx=100, ny=100, zlim=c(-0.2,1.2), main=paste0("abs(error) of ", form, ", Level ", j))   
+  quilt.plot(x=rep(grid.tmp,each=100), y = rep(grid.tmp,100), z = abs(foo$pred.grid[[j]] - result.true), nx=100, ny=100, zlim=c(-0.2,1.2), main=paste0("abs(error) of ", form, ", Level ", j))   
 }
 par(mfrow=c(1,1))
 
