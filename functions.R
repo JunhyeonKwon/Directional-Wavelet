@@ -70,8 +70,11 @@ GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z
     vec.nf.tmp1 = exp(-(x.coord - 0.5)^2 / (sigma^2))
     vec.nf.tmp2 = exp(-(y.coord - 0.5)^2 / (sigma^2))
     return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
-  }
-  else{
+  }else if(form == "phi"){
+    vec.nf.tmp1 = exp(-abs((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16) / (30*sigma^2))
+    vec.nf.tmp2 = exp(-(x.coord - GenerateTestShape(y.coord, "line"))^2 / (2*sigma^2))
+    return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
+  }else{
     return.vec.nf = exp(-(y.coord - GenerateTestShape(x.coord, form))^2 / (2*sigma^2))
   }
   
