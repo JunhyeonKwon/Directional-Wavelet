@@ -65,13 +65,13 @@ GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z
   if(form == "inv"){
     return.vec.nf = exp(-(abs(y.coord-0.5) + 0.5 - GenerateTestShape(x.coord, form))^2 / (2*sigma^2))
   }else if(form == "circle"){
-    return.vec.nf = exp(-abs((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16) / (30*sigma^2))
+    return.vec.nf = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16)^2 / (0.5*sigma^2))
   }else if(form == "cross"){
     vec.nf.tmp1 = exp(-(x.coord - 0.5)^2 / (sigma^2))
     vec.nf.tmp2 = exp(-(y.coord - 0.5)^2 / (sigma^2))
     return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
   }else if(form == "phi"){
-    vec.nf.tmp1 = exp(-abs((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16) / (30*sigma^2))
+    vec.nf.tmp1 = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16)^2 / (0.5*sigma^2))
     vec.nf.tmp2 = exp(-(x.coord - GenerateTestShape(y.coord, "line"))^2 / (2*sigma^2))
     return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
   }else{
@@ -1889,7 +1889,7 @@ SelectSplatForward = function(basis.cand.idx, basis.init.cidx = NULL, eval.mat.o
   
   n.var = length(basis.selected.idx.old)
   
-  while(n.var <= basis.max.num){
+  while(n.var < basis.max.num){
     if(verbose){
       cat("n.var:", n.var, "/ AIC:", AIC.old,"\n")
     }
@@ -1936,6 +1936,9 @@ SelectSplatForward = function(basis.cand.idx, basis.init.cidx = NULL, eval.mat.o
     }else{
       AIC.old = AIC.new
       basis.selected.idx.old = basis.selected.idx.new
+      if(is.infinite(AIC.old)){
+        break
+      }
     }
     
     n.var = length(basis.selected.idx.old)
@@ -2071,6 +2074,56 @@ CenteringData <- function(data, augmentation = FALSE) {
     return(data.centered)
   }
 }
+
+
+GetLOOD = function(splat.2D, data, curve.fitting = FALSE){
+  # LOOD stands for Leave-One-Out Deviation
+  splat.tmp = splat.2D
+  idx2 = splat.tmp$idx2
+  idx = splat.tmp$idx
+  
+  dat.tmp2 = data[idx2, 1:2]
+  
+  dev.vec = vector()
+  
+  if(curve.fitting){
+    for(i in 1:nrow(dat.tmp2)){
+      curvefit = principal_curve(dat.tmp2[-i,], approx_points = length(idx2)-2)
+      
+      curvefit.poly = ConvertCurve2Polygon(curvefit)
+      if(dim(which(is.nan(curvefit.poly), arr.ind = TRUE))[1] != 0){
+        nan.idx = which(is.nan(curvefit.poly), arr.ind = TRUE)[,1]
+        curvefit.poly = curvefit.poly[-nan.idx,]
+      }
+      
+      curvefit.dev2 = GetDeviationFromCurve(dat.tmp2, curvefit.poly)
+      dev.vec[i] = mean(curvefit.dev2$dev^2)
+    }
+  }else{
+    for(i in 1:nrow(dat.tmp2)){
+      
+      dat.tmp2.loo = dat.tmp2[-i,]
+      center.loo = apply(dat.tmp2.loo, 2, mean)
+      svd.loo = svd(cov(dat.tmp2.loo))
+      
+      major.axis.loo = svd.loo$v[,1]
+      
+      dev.vec.loo = vector()
+      for(j in 1:nrow(dat.tmp2)){
+        dev.vec.loo[j] = sum((dat.tmp2[j,] - center.loo)^2) - sum((dat.tmp2[j,] - center.loo) * major.axis.loo)^2
+      }
+      
+      dev.loo = mean(dev.vec.loo)
+      
+      dev.vec[i] = dev.loo
+      
+    }
+  }
+  
+  return(mean(dev.vec))
+}
+
+
 
 
 reset_par <- function(){
