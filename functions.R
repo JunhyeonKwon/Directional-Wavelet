@@ -40,6 +40,11 @@ if(!require(RcppArmadillo)){
 }
 library(RcppArmadillo)
 
+if(!require(EbayesThresh)){
+  install.packages("EbayesThresh")
+}
+library(EbayesThresh)
+
 
 registerDoParallel(cores=detectCores()-1)
 
@@ -65,7 +70,7 @@ GenerateTestShape = function(x, form="sine"){
   }
 }
 
-GenerateTestImage = function(x.coord, y.coord, direction.width=1/60, noise.sd=5, form="sine", z.flux = FALSE){
+GenerateTestImage = function(x.coord, y.coord, direction.width=1/60, noise.sd=0.05, form="sine", z.flux = FALSE){
   x.len = length(x.coord)
   y.len = length(y.coord)
   
@@ -83,7 +88,7 @@ GenerateTestImage = function(x.coord, y.coord, direction.width=1/60, noise.sd=5,
     vec.nf.tmp2 = exp(-(y.coord - 0.5)^2 / (direction.width^2))
     return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
   }else if(form == "phi"){
-    vec.nf.tmp1 = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16)^2 / (0.5*direction.width^2))
+    vec.nf.tmp1 = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/9)^2 / (0.5*direction.width^2))
     vec.nf.tmp2 = exp(-(x.coord - GenerateTestShape(y.coord, "line"))^2 / (2*direction.width^2))
     return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
   }else{
@@ -97,7 +102,7 @@ GenerateTestImage = function(x.coord, y.coord, direction.width=1/60, noise.sd=5,
     # (16*ifelse(x.coord < 0.5, -1, 1) * (x.coord - ifelse(x.coord < 0.5, 0.25, 0.75))^2 + ifelse(x.coord < 0.5, 1, 0))    
   }
   
-  if(noise.sd == Inf){
+  if(noise.sd == 0){
     noise.vec = 0
   }else{
     noise.vec = rnorm(x.len, sd = noise.sd)  
@@ -881,68 +886,9 @@ EvalHaar = function(r){
   return(phi.out)
 }
 
-# EvaluateBasis = function(x, splat.collection.2D, data, curve.fitting = FALSE, mm = 0.5){
-#   
-#   if(is.matrix(x)){
-#     if(ncol(x) == 3) x = x[,1:2]
-#   }else if(is.vector(x)){
-#     if(length(x) == 3) x = x[1:2]
-#   }
-#   
-#   splat.num = length(splat.collection.2D)
-#   
-#   r.mat = matrix(0, nrow=splat.num, ncol=length(x)/2)
-#   # ncol = length(x)/2 는 x가 x, y 좌표를 갖고 있음을 이용한 것
-#   
-#   for(splat.idx in 1:splat.num){
-#     # curve.fitting = TRUE라면 함수에 처음부터 변환된 공간에서의 중심점과 공분산이 들어와야 함
-#     splat.data.idx = splat.collection.2D[[splat.idx]]$idx
-#     splat.data.idx2 = splat.collection.2D[[splat.idx]]$idx2
-#     
-#     
-#     
-#     if(curve.fitting){
-#       x.transformed.tmp = GetDeviationFromCurve(x, splat.collection.2D[[splat.idx]]$polygon)
-#       data.transformed.tmp = GetDeviationFromCurve(data[,1:2], splat.collection.2D[[splat.idx]]$polygon)
-#       
-#       x.transformed = cbind(x.transformed.tmp$lambda, x.transformed.tmp$dev)
-#       data.transformed = cbind(data.transformed.tmp$lambda, data.transformed.tmp$dev)
-#       
-#       splat.center = apply(matrix(data.transformed[splat.data.idx,], ncol=2), 2, mean)
-#       splat.data.cov = cov(data.transformed[splat.data.idx2,])
-#       
-#       idx.aux = setdiff(splat.data.idx2, splat.data.idx)
-#       if(length(idx.aux) != 0){
-#         idx.aux.min = idx.aux[ which.min( sum(TranslateData(data.transformed[idx.aux,], center=-splat.center)^2) ) ]
-#         splat.data.idx = union(splat.data.idx, idx.aux.min)
-#       }
-#       delta = 1 / max(sqrt(mahalanobis(x = data.transformed[splat.data.idx,], center = splat.center, cov = splat.data.cov)))
-#       # modified !!!!!!!
-#       r.tmp = mm * delta * mahalanobis(x = x.transformed, center = splat.center, cov = splat.data.cov)
-#     }else{
-#       splat.center = splat.collection.2D[[splat.idx]]$center
-#       splat.data.cov = splat.collection.2D[[splat.idx]]$cov
-#       
-#       idx.aux = setdiff(splat.data.idx2, splat.data.idx)
-#       if(length(idx.aux) != 0){
-#         idx.aux.min = idx.aux[ which.min( sum(TranslateData(data[idx.aux,1:2], center=-splat.center)^2) ) ]
-#         splat.data.idx = union(splat.data.idx, idx.aux.min)
-#       }
-#       
-#       delta = 1 / max(sqrt(mahalanobis(x = data[splat.data.idx,1:2], center = splat.center, cov = splat.data.cov)))
-#       # modified !!!!!!!
-#       r.tmp = mm * delta * mahalanobis(x = x, center = splat.center, cov = splat.data.cov)
-#     }
-#     
-#     r.mat[splat.idx,] = r.tmp
-#   }
-#   
-#   
-#   return( apply(r.mat, 2, function(x) EvalWendland(x)) )
-# }
 
-# new (obs.num scaling)
-EvaluateBasis = function(x, splat.collection.2D, data, curve.fitting = FALSE, mm = 1){
+
+EvaluateBasis = function(x, splat.collection.2D, data, curve.fitting = FALSE, kernel.scaling = 0.1){
   
   if(is.matrix(x)){
     if(ncol(x) == 3) x = x[,1:2]
@@ -978,70 +924,7 @@ EvaluateBasis = function(x, splat.collection.2D, data, curve.fitting = FALSE, mm
         splat.data.idx = union(splat.data.idx, idx.aux.min)
       }
       delta = 1 / max(sqrt(mahalanobis(x = data.transformed[splat.data.idx,], center = splat.center, cov = splat.data.cov)))
-      # modified !!!!!!!
-      r.tmp = mm * delta * mahalanobis(x = x.transformed, center = splat.center, cov = splat.data.cov)
-    }else{
-      splat.center = splat.collection.2D[[splat.idx]]$center
-      splat.data.cov = splat.collection.2D[[splat.idx]]$cov.2d
       
-      idx.aux = setdiff(splat.data.idx2, splat.data.idx)
-      if(length(idx.aux) != 0){
-        idx.aux.min = idx.aux[ which.min( mahalanobis(data[idx.aux,1:2], center = splat.center, cov = splat.data.cov) ) ]
-        splat.data.idx = union(splat.data.idx, idx.aux.min)
-      }
-      
-      delta = 1 / max(sqrt(mahalanobis(x = data[splat.data.idx,1:2], center = splat.center, cov = splat.data.cov)))
-      # modified !!!!!!!
-      r.tmp = mm * delta * mahalanobis(x = x, center = splat.center, cov = splat.data.cov)
-    }
-    
-    r.mat[,splat.idx] = r.tmp * 0.1
-    # r.mat[,splat.idx] = r.tmp * min(c(splat.data.idx.num * 0.1), 0.9)
-  }
-  
-  
-  return( apply(r.mat, 2, function(x) EvalWendland(x)) )
-}
-
-
-# new (eigenvalue ratio scaling)
-EvaluateBasis = function(x, splat.collection.2D, data, curve.fitting = FALSE, mm = 0.1){
-  
-  if(is.matrix(x)){
-    if(ncol(x) == 3) x = x[,1:2]
-  }else if(is.vector(x)){
-    if(length(x) == 3) x = x[1:2]
-  }
-  
-  splat.num = length(splat.collection.2D)
-  
-  r.mat = matrix(0, ncol=splat.num, nrow=length(x)/2)
-  # ncol = length(x)/2 는 x가 x, y 좌표를 갖고 있음을 이용한 것
-  
-  for(splat.idx in 1:splat.num){
-    # curve.fitting = TRUE라면 함수에 처음부터 변환된 공간에서의 중심점과 공분산이 들어와야 함
-    splat.data.idx = splat.collection.2D[[splat.idx]]$idx
-    splat.data.idx2 = splat.collection.2D[[splat.idx]]$idx2
-    
-    splat.data.idx.num = length(splat.data.idx)
-    
-    if(curve.fitting){
-      x.transformed.tmp = GetDeviationFromCurve(x, splat.collection.2D[[splat.idx]]$polygon)
-      data.transformed.tmp = GetDeviationFromCurve(data[,1:2], splat.collection.2D[[splat.idx]]$polygon)
-      
-      x.transformed = cbind(x.transformed.tmp$lambda, x.transformed.tmp$dev)
-      data.transformed = cbind(data.transformed.tmp$lambda, data.transformed.tmp$dev)
-      
-      splat.center = apply(matrix(data.transformed[splat.data.idx,], ncol=2), 2, mean)
-      splat.data.cov = cov(data.transformed[splat.data.idx2,])
-      
-      idx.aux = setdiff(splat.data.idx2, splat.data.idx)
-      if(length(idx.aux) != 0){
-        idx.aux.min = idx.aux[ which.min( mahalanobis(data.transformed[idx.aux,1:2], center = splat.center, cov = cov(data.transformed[splat.data.idx2,1:2])) ) ]
-        splat.data.idx = union(splat.data.idx, idx.aux.min)
-      }
-      delta = 1 / max(sqrt(mahalanobis(x = data.transformed[splat.data.idx,], center = splat.center, cov = splat.data.cov)))
-      # modified !!!!!!!
       r.tmp = delta * mahalanobis(x = x.transformed, center = splat.center, cov = splat.data.cov)
     }else{
       splat.center = splat.collection.2D[[splat.idx]]$center
@@ -1054,14 +937,11 @@ EvaluateBasis = function(x, splat.collection.2D, data, curve.fitting = FALSE, mm
       }
       
       delta = 1 / max(sqrt(mahalanobis(x = data[splat.data.idx,1:2], center = splat.center, cov = splat.data.cov)))
-      # modified !!!!!!!
+      
       r.tmp = delta * mahalanobis(x = x, center = splat.center, cov = splat.data.cov)
     }
     
-    svd.tmp = svd(splat.data.cov)
-    
-    # r.mat[,splat.idx] = r.tmp * max(svd.tmp$d[2] / svd.tmp$d[1], mm)
-    r.mat[,splat.idx] = r.tmp * 0.1
+    r.mat[,splat.idx] = r.tmp * kernel.scaling
   }
   
   
@@ -1293,9 +1173,6 @@ GetPointDeviationFromCurve = function(p, point.seg){
   }
   return(list(lambda = lambda.min, dev = dist.min * sign.min))
 }
-
-
-
 
 
 GetDeviationFromCurve = function(x, point.seg, arma = FALSE){
@@ -1884,7 +1761,7 @@ GetCurvedSplatBoundary2D = function(splat.idx, splat.collection.2D, data, additi
 
 
 
-SelectSplatForward = function(basis.cand.idx, basis.init.cidx = NULL, eval.mat.obs, basis.max.num, data, prop.var = 0.8, BIC = FALSE, verbose = FALSE, scaling = FALSE, centering = TRUE, parallelization = FALSE){
+SelectSplatForward = function(basis.cand.idx, basis.init.cidx = NULL, eval.mat.obs, basis.max.num, data, prop.var = 0.8, verbose = FALSE, parallelization = FALSE){
   
   AIC.old = AIC.new = 0
   
@@ -1906,8 +1783,6 @@ SelectSplatForward = function(basis.cand.idx, basis.init.cidx = NULL, eval.mat.o
   
   design.matrix.tmp = eval.mat.obs[, basis.selected.idx.old]
   
-  # pcr.tmp = pcr.jh(response = data[,3], predictor = as.matrix(design.matrix.tmp, ncol=1), prop.var = prop.var, scaling = scaling, BIC = BIC, centering = centering)
-  # AIC.old = pcr.tmp$info.crit
   lmfit.tmp = lm(data[,3]~design.matrix.tmp)
   AIC.old = AIC(lmfit.tmp)
   
@@ -1937,9 +1812,6 @@ SelectSplatForward = function(basis.cand.idx, basis.init.cidx = NULL, eval.mat.o
         basis.selected.idx.tmp = c(basis.selected.idx.old, basis.cand.idx[basis.cidx])
         
         design.matrix.tmp = eval.mat.obs[, basis.selected.idx.tmp]
-        
-        # pcr.tmp = pcr.jh(response = data[,3], predictor = design.matrix.tmp, prop.var = prop.var, scaling = scaling, BIC = BIC)
-        # AIC.vec[length(AIC.vec)+1] = pcr.tmp$info.crit
         
         lmfit = lm(data[,3]~design.matrix.tmp)
         AIC.vec[length(AIC.vec) + 1] = AIC(lmfit)
@@ -2148,10 +2020,19 @@ GetLOOD = function(splat.2D, data, curve.fitting = FALSE){
 }
 
 
-
-
-reset_par <- function(){
-  op <- structure(list(xlog = FALSE, ylog = FALSE, adj = 0.5, ann = TRUE, ask = FALSE, bg = "transparent", bty = "o", cex = 1, cex.axis = 1, cex.lab = 1, cex.main = 1.2, cex.sub = 1, col = "black", col.axis = "black", col.lab = "black", col.main = "black", col.sub = "black", crt = 0, err = 0L, family = "", fg = "black", fig = c(0, 1, 0, 1), fin = c(6.99999895833333, 6.99999895833333), font = 1L, font.axis = 1L, font.lab = 1L, font.main = 2L, font.sub = 1L, lab = c(5L, 5L, 7L), las = 0L, lend = "round", lheight = 1, ljoin = "round", lmitre = 10, lty = "solid", lwd = 1, mai = c(1.02, 0.82, 0.82, 0.42), mar = c(5.1, 4.1, 4.1, 2.1), mex = 1, mfcol = c(1L, 1L), mfg = c(1L, 1L, 1L, 1L), mfrow = c(1L, 1L), mgp = c(3, 1, 0), mkh = 0.001, new = FALSE, oma = c(0, 0, 0, 0), omd = c(0, 1, 0, 1), omi = c(0, 0, 0, 0), pch = 1L, pin = c(5.75999895833333, 5.15999895833333), plt = c(0.117142874574832, 0.939999991071427, 0.145714307397962, 0.882857125425167), ps = 12L, pty = "m", smo = 1, srt = 0, tck = NA_real_, tcl = -0.5, usr = c(0.568, 1.432, 0.568, 1.432), xaxp = c(0.6, 1.4, 4), xaxs = "r", xaxt = "s", xpd = FALSE, yaxp = c(0.6, 1.4, 4), yaxs = "r", yaxt = "s", ylbias = 0.2),
-                  .Names = c("xlog", "ylog", "adj", "ann", "ask", "bg", "bty", "cex", "cex.axis", "cex.lab", "cex.main", "cex.sub", "col", "col.axis", "col.lab", "col.main", "col.sub", "crt", "err", "family", "fg", "fig", "fin", "font", "font.axis", "font.lab", "font.main", "font.sub", "lab", "las", "lend", "lheight", "ljoin", "lmitre", "lty", "lwd", "mai", "mar", "mex", "mfcol", "mfg", "mfrow", "mgp", "mkh", "new", "oma", "omd", "omi", "pch", "pin", "plt", "ps", "pty", "smo", "srt", "tck", "tcl", "usr", "xaxp", "xaxs", "xaxt", "xpd", "yaxp", "yaxs", "yaxt", "ylbias"))
-  par(op)
+GenerateSplat = function(data, splat.min.num = 10){
+  splat.collection = list()
+  for(i in 1:dim(data)[1]){
+    splat.collection[[i]] = MakeSplat(i, data)
+  }
+  splat.collection = MergeSplatCollection2(splat.collection, splat.num.target = splat.min.num, data = data)
+  splat.collection.total = splat.collection
+  
+  splat.collection.new = GetSplitSplatCollectionTotal(splat.collection)
+  while(length(splat.collection.new) > 0){
+    splat.collection.total = c(splat.collection.total, splat.collection.new)
+    splat.collection.new = GetSplitSplatCollectionTotal(splat.collection.new)
+  }
+  
+  return(splat.collection.total)
 }
