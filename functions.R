@@ -29,9 +29,21 @@ if(!require(doParallel)){
   install.packages("doParallel")
 }
 library(doParallel)
+
+if(!require(Rcpp)){
+  install.packages("Rcpp")
+}
+library(Rcpp)
+
+if(!require(RcppArmadillo)){
+  install.packages("RcppArmadillo")
+}
+library(RcppArmadillo)
+
+
 registerDoParallel(cores=detectCores()-1)
 
-nbhd.num = 5
+nbhd.num = 8
 
 splat.unit = list(idx=NULL, center=NULL, normal.vector=NULL, major.axis=NULL, minor.axis=NULL, splat.left=NULL, splat.right=NULL, idx2=NULL, cov.2d=NULL, area.2d=NULL, ev.ratio.2d = NULL, activated=TRUE)
 # cov가 3차원, 2차원 혼용되고 있지 않은지 체크할 필요 있음
@@ -53,7 +65,7 @@ GenerateTestShape = function(x, form="sine"){
   }
 }
 
-GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z.flux = FALSE){
+GenerateTestImage = function(x.coord, y.coord, direction.width=1/60, noise.sd=5, form="sine", z.flux = FALSE){
   x.len = length(x.coord)
   y.len = length(y.coord)
   
@@ -63,19 +75,19 @@ GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z
   
   
   if(form == "inv"){
-    return.vec.nf = exp(-(abs(y.coord-0.5) + 0.5 - GenerateTestShape(x.coord, form))^2 / (2*sigma^2))
+    return.vec.nf = exp(-(abs(y.coord-0.5) + 0.5 - GenerateTestShape(x.coord, form))^2 / (2*direction.width^2))
   }else if(form == "circle"){
-    return.vec.nf = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16)^2 / (0.5*sigma^2))
+    return.vec.nf = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16)^2 / (0.5*direction.width^2))
   }else if(form == "cross"){
-    vec.nf.tmp1 = exp(-(x.coord - 0.5)^2 / (sigma^2))
-    vec.nf.tmp2 = exp(-(y.coord - 0.5)^2 / (sigma^2))
+    vec.nf.tmp1 = exp(-(x.coord - 0.5)^2 / (direction.width^2))
+    vec.nf.tmp2 = exp(-(y.coord - 0.5)^2 / (direction.width^2))
     return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
   }else if(form == "phi"){
-    vec.nf.tmp1 = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16)^2 / (0.5*sigma^2))
-    vec.nf.tmp2 = exp(-(x.coord - GenerateTestShape(y.coord, "line"))^2 / (2*sigma^2))
+    vec.nf.tmp1 = exp(-((x.coord-0.5)^2 + (y.coord-0.5)^2 - 1/16)^2 / (0.5*direction.width^2))
+    vec.nf.tmp2 = exp(-(x.coord - GenerateTestShape(y.coord, "line"))^2 / (2*direction.width^2))
     return.vec.nf = apply(cbind(vec.nf.tmp1, vec.nf.tmp2), 1, max)
   }else{
-    return.vec.nf = exp(-(y.coord - GenerateTestShape(x.coord, form))^2 / (2*sigma^2))
+    return.vec.nf = exp(-(y.coord - GenerateTestShape(x.coord, form))^2 / (2*direction.width^2))
   }
   
   if(z.flux){
@@ -85,9 +97,10 @@ GenerateTestImage = function(x.coord, y.coord, sigma=1/60, snr=5, form="sine", z
     # (16*ifelse(x.coord < 0.5, -1, 1) * (x.coord - ifelse(x.coord < 0.5, 0.25, 0.75))^2 + ifelse(x.coord < 0.5, 1, 0))    
   }
   
-  noise.vec = rnorm(x.len, sd = sd(return.vec.nf)/sqrt(snr))
-  if(snr == Inf){
+  if(noise.sd == Inf){
     noise.vec = 0
+  }else{
+    noise.vec = rnorm(x.len, sd = noise.sd)  
   }
   return.vec = return.vec.nf + noise.vec
   
@@ -179,7 +192,7 @@ GetAxesScaler = function(data.target, center, major.axis, minor.axis){
 MakeSplat = function(idx, data){
   splat.tmp = splat.unit
   
-  nbhd.num = 5
+  nbhd.num = 8
   
   if(length(idx)==1){
     center = data[idx, ]
@@ -245,7 +258,7 @@ MakeSplat = function(idx, data){
 # MakeSplat = function(idx, data){
 #   splat.tmp = splat.unit
 #   
-#   nbhd.num = 5
+#   nbhd.num = 8
 #   
 #   if(length(idx)==1){
 #     
@@ -319,7 +332,7 @@ MergeSplat = function(splat.left, splat.right, data, error.metric = "L2"){
   splat.merge = splat.unit
   idx.tmp = union(splat.left$idx, splat.right$idx)
   
-  nbhd.num = 5
+  nbhd.num = 8
   
   if(error.metric == "L2"){
     splat.merge = MakeSplat(idx.tmp, data)  
@@ -410,7 +423,7 @@ MergeSplatCollection = function(splat.collection, splat.num.target, data, error.
 
 MergeSplatCollection2 = function(splat.collection, splat.num.target, data, error.metric = "L2", verbose = FALSE){
   
-  nbhd.num = 5
+  nbhd.num = 8
   splat.num = length(splat.collection)
   center.mat = GetSplatCenters(splat.collection)
   # cost.mat doesn't need to be symmetric
@@ -611,7 +624,7 @@ GetSplatCenters = function(splat.collection){
 }
 
 
-MakeEdgeList = function(splat.collection, nbhd.num = 5){
+MakeEdgeList = function(splat.collection, nbhd.num = 8){
   center.mat = GetSplatCenters(splat.collection)
   splat.num = length(splat.collection)
   
@@ -663,7 +676,7 @@ MakeEdgeListUnique = function(edge.list.mat){
   return(edge.list.mat.unique)
 }
 
-MakeEdges = function(splat.collection, nbhd.num = 5, data, error.metric = "L2"){
+MakeEdges = function(splat.collection, nbhd.num = 8, data, error.metric = "L2"){
   center.mat = GetSplatCenters(splat.collection)
   splat.num = length(splat.collection)
   
@@ -686,7 +699,7 @@ MakeEdges = function(splat.collection, nbhd.num = 5, data, error.metric = "L2"){
   return(list(edge.list = as.vector(edge.list.mat), edge.value = edge.val.vec))
 }
 
-MakeEdges = function(splat.collection, nbhd.num = 5, data, error.metric = "L2"){
+MakeEdges = function(splat.collection, nbhd.num = 8, data, error.metric = "L2"){
   center.mat = GetSplatCenters(splat.collection)
   splat.num = length(splat.collection)
   
@@ -712,7 +725,7 @@ MakeEdges = function(splat.collection, nbhd.num = 5, data, error.metric = "L2"){
 # MakeSplat2D = function(idx, data){
 #   splat.tmp = splat.unit
 #   
-#   nbhd.num = 5
+#   nbhd.num = 8
 #   
 #   if(length(idx)==1){
 #     
@@ -779,7 +792,7 @@ MakeSplat2D = function(splat, data){
   cov.2d = splat.tmp$cov.2d
   center = splat.tmp$center[1:2]
   
-  nbhd.num = 5
+  nbhd.num = 8
   
   svd.2d = svd(cov.2d)
   major.axis = sqrt(svd.2d$d[1]) * svd.2d$v[,1]
@@ -811,7 +824,7 @@ MakeSplat2D = function(splat, data){
 #   splat.tmp = splat
 #   idx2 = splat.tmp$idx2
 #   
-#   nbhd.num = 5
+#   nbhd.num = 8
 #   
 #   center = apply(data[idx2,1:2], 2, mean)
 #   cov.tmp = cov(data[idx2, 1:2])
@@ -1285,7 +1298,7 @@ GetPointDeviationFromCurve = function(p, point.seg){
 
 
 
-GetDeviationFromCurve = function(x, point.seg){
+GetDeviationFromCurve = function(x, point.seg, arma = FALSE){
   # to remove duplicated points
   idx.duplicated = which(apply(diff(point.seg), 1, function(x) sum(x^2))==0)
   if(length(idx.duplicated) != 0){
@@ -1293,11 +1306,22 @@ GetDeviationFromCurve = function(x, point.seg){
   }
   
   if(length(x)==2){
-    result.tmp = GetPointDeviationFromCurve(x, point.seg)
+    x = as.matrix(x, ncol=2)
+    if(arma){
+      result.tmp = GetPointDeviationFromCurve_arma(x, point.seg)  
+    }else{
+      result.tmp = GetPointDeviationFromCurve(x, point.seg)  
+    }
+    
     lambda.vec = result.tmp$lambda
     dev.vec = result.tmp$dev
   }else{
-    result.tmp = apply(x, 1, function(x) GetPointDeviationFromCurve(x, point.seg))
+    if(arma){
+      result.tmp = apply(x, 1, function(x) GetPointDeviationFromCurve_arma(as.matrix(x, ncol=2), point.seg))  
+    }else{
+      result.tmp = apply(x, 1, function(x) GetPointDeviationFromCurve(as.matrix(x, ncol=2), point.seg))  
+    }
+    
     result.len = length(result.tmp)
     
     dev.vec = numeric(result.len)
@@ -2056,9 +2080,9 @@ pcr.jh = function(response, predictor, prop.var = 0.8, scaling = FALSE, BIC = FA
   # AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + 2 * pc.num # 이러면 더하나 마나 한 것도 basis로 넣게될 듯?
   
   if(!BIC){
-    AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + 2 * length(lmfit$coefficients)
+    AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + 2 * (length(lmfit$coefficients) + 1)
   }else{
-    AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + log(length(lmfit$fitted.values)) * length(lmfit$coefficients)
+    AIC = length(lmfit$fitted.values) * log(2 * pi * sum(lmfit$residuals^2) / length(lmfit$fitted.values)) + length(lmfit$fitted.values) + log(length(lmfit$fitted.values)) * (length(lmfit$coefficients) + 1)
   }
   
   return(list(beta = beta, est = est, info.crit = AIC))
